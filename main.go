@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
 	"log"
 	"net/http"
 	"time"
@@ -43,4 +44,52 @@ func main() {
 		}
 		fmt.Println()
 	}
+}
+
+func (s *Scraper) ScrapeHackerNews() ([]Story, error) {
+	url := "https://news.ycombinator.com"
+
+	//	Make HTTP Request
+	resp, err := s.client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to fetch page: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check Status Code
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Bad status code: %d", resp.StatusCode)
+	}
+
+	// Parse HTML
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to parse HTML: %w", err)
+	}
+
+	var stories []Story
+	// Find all story elements
+	doc.Find("tr.athing").Each(func(i int, s *goquery.Selection) {
+		titleElement := s.Find("span.titleline a").First()
+		title := titleElement.Text()
+		href, exists := titleElement.Attr("href")
+
+		if title != "" {
+			story := Story{
+				Title: title,
+			}
+
+			// Handle relative URLs
+			if exists {
+				if href[0] == '/' {
+					story.URL = "https://news.ycombinator.com" + href
+				} else {
+					story.URL = href
+				}
+			}
+			stories = append(stories, story)
+		}
+	})
+
+	return stories, nil
 }
