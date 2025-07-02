@@ -1,21 +1,46 @@
 package main
 
 import (
-  "fmt"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
 )
 
-//TIP <p>To run your code, right-click the code and select <b>Run</b>.</p> <p>Alternatively, click
-// the <icon src="AllIcons.Actions.Execute"/> icon in the gutter and select the <b>Run</b> menu item from here.</p>
+// Story represents a news story
+type Story struct {
+	Title string
+	URL   string
+	ID    int
+}
+
+// Scrapper holds our scrapping configuration
+type Scraper struct {
+	client *http.Client
+}
+
+func NewScrapper() *Scraper {
+	return &Scraper{
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+	}
+}
 
 func main() {
-  //TIP <p>Press <shortcut actionId="ShowIntentionActions"/> when your caret is at the underlined text
-  // to see how GoLand suggests fixing the warning.</p><p>Alternatively, if available, click the lightbulb to view possible fixes.</p>
-  s := "gopher"
-  fmt.Printf("Hello and welcome, %s!\n", s)
+	scraper := NewScrapper()
 
-  for i := 1; i <= 5; i++ {
-	//TIP <p>To start your debugging session, right-click your code in the editor and select the Debug option.</p> <p>We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-	// for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.</p>
-	fmt.Println("i =", 100/i)
-  }
+	stories, err := scraper.ScrapeHackerNews()
+	if err != nil {
+		log.Fatal("Error scraping:", err)
+	}
+
+	fmt.Printf("Found %d stories:\n\n", len(stories))
+	for i, story := range stories {
+		fmt.Printf("%d. %s\n", i+1, story.Title)
+		if story.URL != "" {
+			fmt.Printf("URL:%s\n", story.URL)
+		}
+		fmt.Println()
+	}
 }
