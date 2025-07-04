@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -58,7 +59,12 @@ func (s *Scraper) ScrapeHackerNewsDetailed() ([]Story, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to fetch page: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(resp.Body)
 
 	// Check Status Code
 	if resp.StatusCode != http.StatusOK {
@@ -112,7 +118,10 @@ func (s *Scraper) ScrapeHackerNewsDetailed() ([]Story, error) {
 		// Get Points
 		pointsText := subText.Find("span.score").Text()
 		if pointsText == "" {
-			fmt.Sscanf(pointsText, "%d", &story.Points)
+			_, err := fmt.Sscanf(pointsText, "%d", &story.Points)
+			if err != nil {
+				return
+			}
 		}
 
 		// Get Author
@@ -121,7 +130,10 @@ func (s *Scraper) ScrapeHackerNewsDetailed() ([]Story, error) {
 		commentsLink := subText.Find("a").Last()
 		commentsText := commentsLink.Text()
 		if commentsText != "" && commentsText != story.Author {
-			fmt.Sscanf(commentsText, "%d", &story.Comments)
+			_, err := fmt.Sscanf(commentsText, "%d", &story.Comments)
+			if err != nil {
+				return
+			}
 		}
 
 		stories = append(stories, story)
