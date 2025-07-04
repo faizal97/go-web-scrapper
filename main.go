@@ -5,14 +5,18 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
 // Story represents a news story
 type Story struct {
-	Title string
-	URL   string
-	ID    int
+	Title    string
+	URL      string
+	Points   int
+	Comments int
+	Author   string
+	ID       string
 }
 
 // Scrapper holds our scrapping configuration
@@ -31,7 +35,7 @@ func NewScrapper() *Scraper {
 func main() {
 	scraper := NewScrapper()
 
-	stories, err := scraper.ScrapeHackerNews()
+	stories, err := scraper.ScrapeHackerNewsDetailed()
 	if err != nil {
 		log.Fatal("Error scraping:", err)
 	}
@@ -46,7 +50,7 @@ func main() {
 	}
 }
 
-func (s *Scraper) ScrapeHackerNews() ([]Story, error) {
+func (s *Scraper) ScrapeHackerNewsDetailed() ([]Story, error) {
 	url := "https://news.ycombinator.com"
 
 	//	Make HTTP Request
@@ -69,26 +73,58 @@ func (s *Scraper) ScrapeHackerNews() ([]Story, error) {
 
 	var stories []Story
 	// Find all story elements
-	doc.Find("tr.athing").Each(func(i int, s *goquery.Selection) {
-		titleElement := s.Find("span.titleline a").First()
+	doc.Find("tr.athing").Each(func(i int, storyRow *goquery.Selection) {
+		// Get Story ID
+		storyID, _ := storyRow.Attr("id")
+
+		// Get Title and URL
+		titleElement := storyRow.Find("span.titleline a").First()
 		title := titleElement.Text()
-		href, exists := titleElement.Attr("href")
+		href, _ := titleElement.Attr("href")
 
-		if title != "" {
-			story := Story{
-				Title: title,
-			}
+		if title == "" {
+			return
+		}
 
-			// Handle relative URLs
-			if exists {
-				if href[0] == '/' {
-					story.URL = "https://news.ycombinator.com" + href
-				} else {
-					story.URL = href
-				}
+		story := Story{
+			Title: title,
+			ID:    storyID,
+		}
+
+		// Handle URLs
+		if href != "" {
+			if strings.HasPrefix(href, "/") {
+				story.URL = "https://news.ycombinator.com" + href
+			} else {
+				story.URL = href
 			}
+		}
+
+		// Get MetaData from the next row(subtext)
+		metaRow := storyRow.Next()
+		if metaRow.HasClass("athing") {
+			// This Story doesn't have metadata (like job posts)
 			stories = append(stories, story)
 		}
+
+		subText := metaRow.Find("td.subtext")
+
+		// Get Points
+		pointsText := subText.Find("span.score").Text()
+		if pointsText == "" {
+			fmt.Sscanf(pointsText, "%d", &story.Points)
+		}
+
+		// Get Author
+		story.Author = subText.Find("a.hnuser").Text()
+		// Get Comments Count
+		commentsLink := subText.Find("a").Last()
+		commentsText := commentsLink.Text()
+		if commentsText != "" && commentsText != story.Author {
+			fmt.Sscanf(commentsText, "%d", &story.Comments)
+		}
+
+		stories = append(stories, story)
 	})
 
 	return stories, nil
