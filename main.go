@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -19,7 +20,7 @@ type Story struct {
 	ID       string
 }
 
-// Scrapper holds our scrapping configuration
+// Scraper holds our scrapping configuration
 type Scraper struct {
 	client *http.Client
 }
@@ -56,19 +57,24 @@ func (s *Scraper) ScrapeHackerNewsDetailed() ([]Story, error) {
 	//	Make HTTP Request
 	resp, err := s.client.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to fetch page: %w", err)
+		return nil, fmt.Errorf("failed to fetch page: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(resp.Body)
 
 	// Check Status Code
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Bad status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("bad status code: %d", resp.StatusCode)
 	}
 
 	// Parse HTML
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse HTML: %w", err)
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
 	}
 
 	var stories []Story
@@ -112,7 +118,10 @@ func (s *Scraper) ScrapeHackerNewsDetailed() ([]Story, error) {
 		// Get Points
 		pointsText := subText.Find("span.score").Text()
 		if pointsText == "" {
-			fmt.Sscanf(pointsText, "%d", &story.Points)
+			_, err := fmt.Sscanf(pointsText, "%d", &story.Points)
+			if err != nil {
+				return
+			}
 		}
 
 		// Get Author
@@ -121,7 +130,10 @@ func (s *Scraper) ScrapeHackerNewsDetailed() ([]Story, error) {
 		commentsLink := subText.Find("a").Last()
 		commentsText := commentsLink.Text()
 		if commentsText != "" && commentsText != story.Author {
-			fmt.Sscanf(commentsText, "%d", &story.Comments)
+			_, err := fmt.Sscanf(commentsText, "%d", &story.Comments)
+			if err != nil {
+				return
+			}
 		}
 
 		stories = append(stories, story)
