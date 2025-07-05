@@ -34,18 +34,59 @@ func NewScrapper() *Scraper {
 }
 
 func main() {
+	mode := "concurrent"
+
+	switch mode {
+	case "basic":
+		basicScraping()
+	case "concurrent":
+		concurrentScraping()
+	default:
+		fmt.Println("Invalid mode")
+	}
+}
+
+func basicScraping() {
 	scraper := NewScrapper()
 
 	stories, err := scraper.ScrapeHackerNewsDetailed()
 	if err != nil {
-		log.Fatal("Error scraping:", err)
+		log.Fatal("error scraping:", err)
 	}
 
-	fmt.Printf("Found %d stories:\n\n", len(stories))
+	displayStories(stories)
+}
+
+func concurrentScraping() {
+	scraper := NewConcurrentScraper(3)
+	fmt.Println("starting concurrent scraping")
+	start := time.Now()
+
+	stories, err := scraper.ScrapeMultiplePages(3)
+	if err != nil {
+		log.Printf("Warning: %v", err)
+	}
+
+	duration := time.Since(start)
+	fmt.Printf("\nScraping completed in %v\n", duration)
+
+	displayStories(stories)
+}
+
+func displayStories(stories []Story) {
+	fmt.Printf("\nFound %d stories:\n\n", len(stories))
 	for i, story := range stories {
+		if i >= 20 {
+			fmt.Printf("...and %d more stories\n", len(stories)-i)
+			break
+		}
+
 		fmt.Printf("%d. %s\n", i+1, story.Title)
+		if story.Author != "" || story.Points > 0 || story.Comments > 0 {
+			fmt.Printf("Author: %s | Points: %d | Comments: %d\n", story.Author, story.Points, story.Comments)
+		}
 		if story.URL != "" {
-			fmt.Printf("URL:%s\n", story.URL)
+			fmt.Printf("URL: %s\n", story.URL)
 		}
 		fmt.Println()
 	}
