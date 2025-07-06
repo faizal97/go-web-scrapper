@@ -1,12 +1,18 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"flag"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -34,15 +40,68 @@ func NewScrapper() *Scraper {
 }
 
 func main() {
-	mode := "concurrent"
+	config := ParseFlags()
 
-	switch mode {
-	case "basic":
-		basicScraping()
-	case "concurrent":
-		concurrentScraping()
+	if err := config.Validate(); err != nil {
+		fmt.Printf(os.Stderr, "Configuration error: %v\n", err)
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		fmt.Println("\nShutting down...")
+		cancel()
+	}()
+
+	if err := runScraper(ctx, config); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func runScraper(ctx context.Context, config *Config) error {
+	scraper := NewEnhancedScraper()
+
+	if config.Verbose {
+		scraper.logger.Printf("Starting scraper with config:pages=%d, workers=%d", config.Pages, config.Workers)
+	}
+
+	start := time.Now()
+	var allStories []Story
+
+	if config.Pages == 1 {
+		stories, err := scraper.ScrapeWithContext(ctx, "https://news.ycombinator.com")
+		if err != nil {
+			return fmt.Errorf("error scraping: %w", err)
+		}
+		allStories = stories
+	}
+
+	duration := time.Since(start)
+
+	if config.Verbose {
+		scraper.logger.Printf("scraping completed in %v, found %d stories", duration, len(allStories))
+	}
+
+	return outputStories(allStories, config)
+}
+
+func outputStories(stories []Story, config *Config) error {
+	switch config.Output {
+	case "json":
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(stories)
+	case "console":
+		fallthrough
 	default:
-		fmt.Println("Invalid mode")
+		displayStories(stories)
+		return nil
 	}
 }
 
