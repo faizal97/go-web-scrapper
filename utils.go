@@ -99,13 +99,13 @@ func (es *EnhancedScraper) parseStoryRow(storyRow *goquery.Selection) Story {
 
 	metaRow := storyRow.Next()
 	if !metaRow.HasClass("athing") {
-		es.parseMetaData(&story, metaRow)
+		es.parseMetadata(&story, metaRow)
 	}
 
 	return story
 }
 
-func (es *EnhancedScraper) parseMetaData(story *Story, metaRow *goquery.Selection) {
+func (es *EnhancedScraper) parseMetadata(story *Story, metaRow *goquery.Selection) {
 	subtext := metaRow.Find("td.subtext")
 
 	pointsText := subtext.Find("span.score").Text()

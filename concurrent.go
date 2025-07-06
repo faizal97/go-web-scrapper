@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"sync"
@@ -16,7 +17,7 @@ type ConcurrentScraper struct {
 // NewConcurrentScraper creates a new concurrent scraper
 func NewConcurrentScraper(workers int) *ConcurrentScraper {
 	return &ConcurrentScraper{
-		scraper: NewScrapper(),
+		scraper: NewScraper(),
 		workers: workers,
 	}
 }
@@ -39,7 +40,7 @@ func (cs *ConcurrentScraper) ScrapeMultiplePages(pages int) ([]Story, error) {
 		go cs.worker(jobs, results, &wg)
 	}
 
-	for p := 0; p <= pages; p++ {
+	for p := 1; p <= pages; p++ {
 		jobs <- p
 	}
 	close(jobs)
@@ -75,7 +76,7 @@ func (cs *ConcurrentScraper) worker(jobs <-chan int, result chan<- ScrapeResult,
 
 		var url string
 		if page == 1 {
-			url = "https://news.ycombinator.com/"
+			url = "https://news.ycombinator.com"
 		} else {
 			url = fmt.Sprintf("https://news.ycombinator.com/news?p=%d", page)
 		}
@@ -126,7 +127,7 @@ func (cs *ConcurrentScraper) scrapePageByURL(url string) ([]Story, error) {
 
 		if href != "" {
 			if href[0] == '/' {
-				story.URL = "https://news.ycombinator.com/" + href
+				story.URL = "https://news.ycombinator.com" + href
 			} else {
 				story.URL = href
 			}
@@ -151,4 +152,89 @@ func (cs *ConcurrentScraper) scrapePageByURL(url string) ([]Story, error) {
 	})
 
 	return stories, nil
+}
+
+// NewConcurrentScraperWithContext creates a new concurrent scraper with enhanced scraper
+func NewConcurrentScraperWithContext(scraper *EnhancedScraper, workers int) *ConcurrentScraperWithContext {
+	return &ConcurrentScraperWithContext{
+		scraper: scraper,
+		workers: workers,
+	}
+}
+
+// ConcurrentScraperWithContext handles concurrent scraping with context
+type ConcurrentScraperWithContext struct {
+	scraper *EnhancedScraper
+	workers int
+}
+
+// ScrapeMultiplePagesWithContext scrapes multiple pages concurrently with context
+func (cs *ConcurrentScraperWithContext) ScrapeMultiplePagesWithContext(ctx context.Context, pages int) ([]Story, error) {
+	jobs := make(chan int, pages)
+	results := make(chan ScrapeResult, pages)
+
+	var wg sync.WaitGroup
+	for w := 0; w < cs.workers; w++ {
+		wg.Add(1)
+		go cs.workerWithContext(ctx, jobs, results, &wg)
+	}
+
+	for p := 1; p <= pages; p++ {
+		jobs <- p
+	}
+	close(jobs)
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var allStories []Story
+	var errors []error
+
+	for result := range results {
+		if result.Error != nil {
+			errors = append(errors, result.Error)
+		} else {
+			allStories = append(allStories, result.Stories...)
+		}
+	}
+
+	if len(errors) > 0 {
+		return allStories, fmt.Errorf("encountered %d errors during scraping", len(errors))
+	}
+
+	return allStories, nil
+}
+
+// workerWithContext processes scraping jobs with context
+func (cs *ConcurrentScraperWithContext) workerWithContext(ctx context.Context, jobs <-chan int, results chan<- ScrapeResult, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for page := range jobs {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			fmt.Printf("Scraping page %d...\n", page)
+
+			var url string
+			if page == 1 {
+				url = "https://news.ycombinator.com"
+			} else {
+				url = fmt.Sprintf("https://news.ycombinator.com/news?p=%d", page)
+			}
+
+			stories, err := cs.scraper.ScrapeWithContext(ctx, url)
+
+			results <- ScrapeResult{
+				Stories: stories,
+				Page:    page,
+				Error:   err,
+			}
+
+			// Be nice to the server
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 }

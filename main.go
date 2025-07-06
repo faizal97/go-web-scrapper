@@ -31,7 +31,7 @@ type Scraper struct {
 	client *http.Client
 }
 
-func NewScrapper() *Scraper {
+func NewScraper() *Scraper {
 	return &Scraper{
 		client: &http.Client{
 			Timeout: 10 * time.Second,
@@ -80,6 +80,14 @@ func runScraper(ctx context.Context, config *Config) error {
 			return fmt.Errorf("error scraping: %w", err)
 		}
 		allStories = stories
+	} else {
+		// Multi-page concurrent scraping
+		concurrentScraper := NewConcurrentScraperWithContext(scraper, config.Workers)
+		stories, err := concurrentScraper.ScrapeMultiplePagesWithContext(ctx, config.Pages)
+		if err != nil {
+			return fmt.Errorf("concurrent scraping failed: %w", err)
+		}
+		allStories = stories
 	}
 
 	duration := time.Since(start)
@@ -106,7 +114,7 @@ func outputStories(stories []Story, config *Config) error {
 }
 
 func basicScraping() {
-	scraper := NewScrapper()
+	scraper := NewScraper()
 
 	stories, err := scraper.ScrapeHackerNewsDetailed()
 	if err != nil {
@@ -217,7 +225,7 @@ func (s *Scraper) ScrapeHackerNewsDetailed() ([]Story, error) {
 
 		// Get Points
 		pointsText := subText.Find("span.score").Text()
-		if pointsText == "" {
+		if pointsText != "" {
 			_, err := fmt.Sscanf(pointsText, "%d", &story.Points)
 			if err != nil {
 				return
