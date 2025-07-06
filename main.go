@@ -43,7 +43,7 @@ func main() {
 	config := ParseFlags()
 
 	if err := config.Validate(); err != nil {
-		fmt.Printf(os.Stderr, "Configuration error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
 		flag.Usage()
 		os.Exit(1)
 	}

@@ -65,8 +65,21 @@ func (es *EnhancedScraper) ScrapeWithContext(ctx context.Context, url string) ([
 	return stories, nil
 }
 
-func (es *EnhancedScraper) parseStories(storyRow *goquery.Selection) Story {
-	storyID := storyRow.Find("id")
+func (es *EnhancedScraper) parseStories(doc *goquery.Document) []Story {
+	var stories []Story
+
+	doc.Find("tr.athing").Each(func(i int, storyRow *goquery.Selection) {
+		story := es.parseStoryRow(storyRow)
+		if story.Title != "" {
+			stories = append(stories, story)
+		}
+	})
+
+	return stories
+}
+
+func (es *EnhancedScraper) parseStoryRow(storyRow *goquery.Selection) Story {
+	storyID, _ := storyRow.Attr("id")
 	titleElement := storyRow.Find("span.titleline a").First()
 	title := titleElement.Text()
 	href, _ := titleElement.Attr("href")

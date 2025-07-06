@@ -36,7 +36,7 @@ func (cs *ConcurrentScraper) ScrapeMultiplePages(pages int) ([]Story, error) {
 	var wg sync.WaitGroup
 	for w := 0; w < cs.workers; w++ {
 		wg.Add(1)
-		go cs.workers(jobs, results, &wg)
+		go cs.worker(jobs, results, &wg)
 	}
 
 	for p := 0; p <= pages; p++ {
@@ -80,7 +80,7 @@ func (cs *ConcurrentScraper) worker(jobs <-chan int, result chan<- ScrapeResult,
 			url = fmt.Sprintf("https://news.ycombinator.com/news?p=%d", page)
 		}
 
-		stories, err := cs.ScrapeMultiplePages(url)
+		stories, err := cs.scrapePageByURL(url)
 
 		result <- ScrapeResult{
 			Stories: stories,
